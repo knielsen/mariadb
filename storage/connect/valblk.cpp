@@ -1,7 +1,7 @@
 /************ Valblk C++ Functions Source Code File (.CPP) *************/
-/*  Name: VALBLK.CPP  Version 2.0                                      */
+/*  Name: VALBLK.CPP  Version 2.1                                      */
 /*                                                                     */
-/*  (C) Copyright to the author Olivier BERTRAND          2005-2013    */
+/*  (C) Copyright to the author Olivier BERTRAND          2005-2014    */
 /*                                                                     */
 /*  This file contains the VALBLK and derived classes functions.       */
 /*  Second family is VALBLK, representing simple suballocated arrays   */
@@ -40,7 +40,10 @@
 #include "plgdbsem.h"
 #include "valblk.h"
 
-#define CheckBlanks     assert(!Blanks);
+#define CheckBlanks      assert(!Blanks);
+#define CheckParms(V, N) ChkIndx(N); ChkTyp(V);
+
+extern "C" int  trace;
 
 /***********************************************************************/
 /*  AllocValBlock: allocate a VALBLK according to type.                */
@@ -50,10 +53,9 @@ PVBLK AllocValBlock(PGLOBAL g, void *mp, int type, int nval, int len,
   {
   PVBLK blkp;
 
-#ifdef DEBTRACE
- htrc("AVB: mp=%p type=%d nval=%d len=%d check=%u blank=%u\n",
-  mp, type, nval, len, check, blank);
-#endif
+  if (trace)
+    htrc("AVB: mp=%p type=%d nval=%d len=%d check=%u blank=%u\n",
+         mp, type, nval, len, check, blank);
 
   switch (type) {
     case TYPE_STRING:
@@ -235,6 +237,23 @@ void TYPBLK<TYPE>::Init(PGLOBAL g, bool check)
   Check = check;
   Global = g;
   } // end of Init
+
+/***********************************************************************/
+/*  TYPVAL GetCharString: get string representation of a typed value.  */
+/***********************************************************************/
+template <class TYPE>
+char *TYPBLK<TYPE>::GetCharString(char *p, int n)
+  {
+  sprintf(p, Fmt, Typp[n]);
+  return p;
+  } // end of GetCharString
+
+template <>
+char *TYPBLK<double>::GetCharString(char *p, int n)
+  {
+  sprintf(p, Fmt, Prec, Typp[n]);
+  return p;
+  } // end of GetCharString
 
 /***********************************************************************/
 /*  Set one value in a block.                                          */
@@ -528,7 +547,7 @@ int TYPBLK<TYPE>::Find(PVAL vp)
 template <class TYPE>
 int TYPBLK<TYPE>::GetMaxLength(void)
   {
-  char buf[32];
+  char buf[64];
   int i, n, m;
 
   for (i = n = 0; i < Nval; i++) {
@@ -678,6 +697,14 @@ double CHRBLK::GetFloatValue(int n)
   } // end of GetFloatValue
 
 /***********************************************************************/
+/*  STRING GetCharString: get string representation of a char value.   */
+/***********************************************************************/
+char *CHRBLK::GetCharString(char *p, int n)
+  {
+  return (char *)GetValPtrEx(n);
+  } // end of GetCharString
+
+/***********************************************************************/
 /*  Set one value in a block.                                          */
 /***********************************************************************/
 void CHRBLK::SetValue(PVAL valp, int n)
@@ -711,13 +738,13 @@ void CHRBLK::SetValue(char *sp, uint len, int n)
   {
   char  *p = Chrp + n * Long;
 
-#if defined(_DEBUG) || defined(DEBTRACE)
+#if defined(_DEBUG)
   if (Check && (signed)len > Long) {
     PGLOBAL& g = Global;
     strcpy(g->Message, MSG(SET_STR_TRUNC));
     longjmp(g->jumper[g->jump_level], Type);
     } // endif Check
-#endif
+#endif   // _DEBUG
 
   if (sp)
     memcpy(p, sp, min((unsigned)Long, len));
@@ -760,13 +787,13 @@ void CHRBLK::SetValue(PVBLK pv, int n1, int n2)
 /***********************************************************************/
 void CHRBLK::SetValues(PVBLK pv, int k, int n)
   {
-#if defined(_DEBUG) || defined(DEBTRACE)
+#if defined(_DEBUG)
   if (Type != pv->GetType() || Long != ((CHRBLK*)pv)->Long) {
     PGLOBAL& g = Global;
     strcpy(g->Message, MSG(BLKTYPLEN_MISM));
     longjmp(g->jumper[g->jump_level], Type);
     } // endif Type
-#endif
+#endif   // _DEBUG
   char *p = ((CHRBLK*)pv)->Chrp;
 
   if (!k)
@@ -1184,6 +1211,22 @@ bool DATBLK::SetFormat(PGLOBAL g, PSZ fmt, int len, int year)
 
   return false;
   } // end of SetFormat
+
+/***********************************************************************/
+/*  DTVAL GetCharString: get string representation of a date value.    */
+/***********************************************************************/
+char *DATBLK::GetCharString(char *p, int n)
+  {
+  char *vp;
+
+  if (Dvalp) {
+    Dvalp->SetValue(Typp[n]);
+    vp = Dvalp->GetCharString(p);
+  } else
+    vp = TYPBLK<int>::GetCharString(p, n);
+
+  return vp;
+  } // end of GetCharString
 
 /***********************************************************************/
 /*  Set one value in a block from a char string.                       */
